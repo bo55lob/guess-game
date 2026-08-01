@@ -1,0 +1,59 @@
+# Guess Game
+
+A multiplayer browser game where players secretly choose an answer and take turns asking questions to guess each other's answers.
+
+## Tech Stack
+
+Frontend:
+- React
+- Vite
+- Socket.IO Client
+
+Backend:
+- Node.js
+- Express
+- Socket.IO
+
+## Running Locally
+
+### Server
+
+cd server
+npm install
+npm run dev
+
+### Client
+
+cd client
+npm install
+npm run dev
+
+Frontend:
+http://localhost:5173
+
+Backend:
+http://localhost:3001
+
+## Current Features
+
+- Create rooms
+- Join rooms
+- Secret answers
+- Ready system
+- Turn-based questions
+- Yes/No/Maybe answers
+- Guessing players
+- Question history
+
+## Known Issues
+
+- Elimination system needs improvement
+- Winner handling needs finishing
+- UI needs polishing
+
+## Future Plans
+
+- Better UI
+- Categories
+- Timers
+- Deployment
