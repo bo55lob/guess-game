@@ -1,0 +1,24 @@
+# DEV NOTES
+
+## Game Rules
+
+Each player has one secret answer.
+
+Questions are turn based.
+
+Players can guess another player's answer, only on their turn.
+
+## Important Decisions
+
+The game uses Socket.IO because it needs real-time multiplayer.
+
+Questions are stored server-side.
+
+Answers are never broadcast.
+
+## Current Development Focus
+
+Finish:
+1. Elimination
+2. Winner detection
+3. UI improvements
