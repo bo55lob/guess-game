@@ -53,11 +53,8 @@ function App() {
     });
 
     socket.on("guessResult", ({ message }) => setMessage(message));
-
     socket.on("gameWinner", ({ winner }) => setWinner(winner));
-
     socket.on("questionHistory", setHistory);
-
     socket.on("errorMessage", (error) => setMessage(error));
 
     return () => {
@@ -78,18 +75,12 @@ function App() {
   }
 
   function joinRoom() {
-    socket.emit("joinRoom", {
-      roomCode: room.toUpperCase(),
-      playerName: name,
-    });
+    socket.emit("joinRoom", { roomCode: room.toUpperCase(), playerName: name });
     setJoinedRoom(room.toUpperCase());
   }
 
   function submitAnswer() {
-    socket.emit("submitAnswer", {
-      roomCode: joinedRoom,
-      answer,
-    });
+    socket.emit("submitAnswer", { roomCode: joinedRoom, answer });
   }
 
   function startGame() {
@@ -98,24 +89,16 @@ function App() {
 
   function askQuestion() {
     if (!question.trim()) return;
-
-    socket.emit("askQuestion", {
-      roomCode: joinedRoom,
-      question,
-    });
+    socket.emit("askQuestion", { roomCode: joinedRoom, question });
     setQuestion("");
   }
 
   function answerQuestion(value) {
-    socket.emit("answerQuestion", {
-      roomCode: joinedRoom,
-      answer: value,
-    });
+    socket.emit("answerQuestion", { roomCode: joinedRoom, answer: value });
   }
 
   function makeGuess() {
     if (!guessPlayer || !guess.trim()) return;
-
     socket.emit("makeGuess", {
       roomCode: joinedRoom,
       targetPlayer: guessPlayer,
@@ -127,165 +110,307 @@ function App() {
 
   const isMyTurn = currentTurn === name;
   const activePlayers = players.filter((p) => !p.eliminated);
+  const eliminatedPlayers = players.filter((p) => p.eliminated);
   const hasAnswered = answeredPlayers.includes(name);
   const isAsking = currentQuestion?.player === name;
+  const responseTotal = questionAnswers.length + pendingPlayers.length;
 
-  return (
-    <div>
-      <h1>Guess Game</h1>
+  if (!joinedRoom) {
+    return (
+      <div className="app-shell lobby-shell">
+        <header className="game-header">
+          <div>
+            <span className="eyebrow">DEDUCTION GAME</span>
+            <h1>Guess Game</h1>
+            <p>Ask questions. Read the answers. Find their secret.</p>
+          </div>
+        </header>
 
-      {!joinedRoom ? (
-        <>
+        <main className="lobby-card">
+          <h2>Join a game</h2>
+          <p className="muted">Create a room for your friends or enter an existing room code.</p>
+
+          <label>Your name</label>
           <input
-            placeholder="Name"
+            placeholder="Enter your name"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
 
-          <button onClick={createRoom}>Create Room</button>
+          <div className="lobby-actions">
+            <button className="primary-button" onClick={createRoom} disabled={!name.trim()}>
+              Create Room
+            </button>
+          </div>
 
-          <br />
+          <div className="divider"><span>OR</span></div>
 
-          <input
-            placeholder="Room code"
-            value={room}
-            onChange={(e) => setRoom(e.target.value)}
-          />
+          <label>Room code</label>
+          <div className="inline-form">
+            <input
+              placeholder="ABCDE"
+              value={room}
+              maxLength={5}
+              onChange={(e) => setRoom(e.target.value.toUpperCase())}
+            />
+            <button onClick={joinRoom} disabled={!name.trim() || room.length !== 5}>
+              Join Room
+            </button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
-          <button onClick={joinRoom}>Join Room</button>
-        </>
-      ) : !gameStarted ? (
-        <>
-          <h2>Room: {joinedRoom}</h2>
+  if (!gameStarted) {
+    return (
+      <div className="app-shell">
+        <header className="game-header compact-header">
+          <div>
+            <span className="eyebrow">ROOM</span>
+            <h1>{joinedRoom}</h1>
+          </div>
+          <div className="room-badge">Waiting for players</div>
+        </header>
 
-          <input
-            placeholder="Secret answer"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-          />
+        <main className="waiting-layout">
+          <section className="panel secret-panel">
+            <span className="panel-label">YOUR SECRET</span>
+            <h2>Choose your answer</h2>
+            <p className="muted">This is what the other players are trying to discover.</p>
+            <div className="inline-form">
+              <input
+                placeholder="Secret answer"
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+              />
+              <button className="primary-button" onClick={submitAnswer}>
+                Ready
+              </button>
+            </div>
+          </section>
 
-          <button onClick={submitAnswer}>Ready</button>
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <span className="panel-label">PLAYERS</span>
+                <h2>Who's here?</h2>
+              </div>
+              <span className="count-badge">{players.length}</span>
+            </div>
+            <div className="player-list">
+              {players.map((p) => (
+                <div className="player-row" key={p.id}>
+                  <span className="player-avatar">{p.name.charAt(0).toUpperCase()}</span>
+                  <span>{p.name}</span>
+                  <span className={p.ready ? "status ready" : "status waiting"}>
+                    {p.ready ? "Ready" : "Not ready"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {players.length > 0 && players.every((p) => p.ready) && (
+              <button className="primary-button full-button" onClick={startGame}>
+                Start Game
+              </button>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
-          <h3>Players</h3>
-          {players.map((p) => (
-            <p key={p.id}>
-              {p.name} {p.ready ? "✅" : "⏳"}
-            </p>
-          ))}
+  return (
+    <div className="app-shell game-shell">
+      <header className="game-header compact-header">
+        <div>
+          <span className="eyebrow">GUESS GAME</span>
+          <h1>Room {joinedRoom}</h1>
+        </div>
+        <div className={isMyTurn ? "turn-badge your-turn" : "turn-badge"}>
+          {isMyTurn ? "🎯 Your turn" : `${currentTurn}'s turn`}
+        </div>
+      </header>
 
-          {players.length > 0 && players.every((p) => p.ready) && (
-            <button onClick={startGame}>Start Game</button>
-          )}
-        </>
+      {winner ? (
+        <main className="winner-panel">
+          <div className="winner-icon">🏆</div>
+          <span className="eyebrow">GAME OVER</span>
+          <h2>{winner} wins!</h2>
+          <p className="muted">They were the last player standing.</p>
+        </main>
       ) : (
-        <>
-          {winner ? (
-            <h1>🎉 {winner} wins!</h1>
-          ) : (
-            <>
-              <h2>
-                {isMyTurn ? "🎯 Your turn" : `${currentTurn}'s turn`}
-              </h2>
+        <main className="game-layout">
+          <aside className="sidebar">
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <span className="panel-label">PLAYERS</span>
+                  <h2>In the game</h2>
+                </div>
+                <span className="count-badge">{activePlayers.length}</span>
+              </div>
 
-              {currentQuestion && (
-                <>
-                  <h3>{currentQuestion.player} asks:</h3>
-                  <h2>{currentQuestion.question}</h2>
+              <div className="player-list">
+                {activePlayers.map((p) => (
+                  <div className={p.name === currentTurn ? "player-row current-player" : "player-row"} key={p.id}>
+                    <span className="player-avatar">{p.name.charAt(0).toUpperCase()}</span>
+                    <span className="player-name">
+                      {p.name}
+                      {p.name === name && <small>YOU</small>}
+                    </span>
+                    {p.name === currentTurn && <span className="turn-dot">●</span>}
+                  </div>
+                ))}
+              </div>
 
-                  {!isAsking && !hasAnswered && (
-                    <div>
-                      <p>❓ Your answer:</p>
+              {eliminatedPlayers.length > 0 && (
+                <div className="eliminated-section">
+                  <span className="panel-label">ELIMINATED</span>
+                  {eliminatedPlayers.map((p) => (
+                    <div className="player-row eliminated" key={p.id}>
+                      <span className="player-avatar">{p.name.charAt(0).toUpperCase()}</span>
+                      <span>{p.name}</span>
+                      <span>💀</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </aside>
+
+          <section className="main-column">
+            {currentQuestion ? (
+              <section className="panel question-panel">
+                <div className="question-meta">
+                  <span className="panel-label">CURRENT QUESTION</span>
+                  <span className="response-count">
+                    {questionAnswers.length}/{responseTotal} answered
+                  </span>
+                </div>
+
+                <p className="asker">{currentQuestion.player} asks:</p>
+                <h2 className="question-text">“{currentQuestion.question}”</h2>
+
+                {!isAsking && !hasAnswered && (
+                  <div className="answer-area">
+                    <p className="instruction">What is your answer?</p>
+                    <div className="answer-buttons">
                       <button onClick={() => answerQuestion("Yes")}>Yes</button>
                       <button onClick={() => answerQuestion("No")}>No</button>
                       <button onClick={() => answerQuestion("Maybe")}>Maybe</button>
                     </div>
-                  )}
-
-                  {!isAsking && hasAnswered && (
-                    <p>✅ You answered. Waiting for the others...</p>
-                  )}
-
-                  {isAsking && (
-                    <p>👀 Waiting for everyone else to answer...</p>
-                  )}
-
-                  <div>
-                    <h3>
-                      Responses ({questionAnswers.length}/{questionAnswers.length + pendingPlayers.length})
-                    </h3>
-
-                    {questionAnswers.map((a) => (
-                      <p key={a.player}>
-                        ✅ <b>{a.player}</b>: {a.answer}
-                      </p>
-                    ))}
-
-                    {pendingPlayers.map((player) => (
-                      <p key={player}>
-                        ⏳ <b>{player}</b>: Waiting for answer...
-                      </p>
-                    ))}
                   </div>
-                </>
-              )}
+                )}
 
-              {isMyTurn && !currentQuestion && (
-                <>
+                {!isAsking && hasAnswered && (
+                  <div className="waiting-message success-message">✓ Your answer is locked in. Waiting for the others.</div>
+                )}
+
+                {isAsking && (
+                  <div className="waiting-message">👀 Waiting for everyone else to answer.</div>
+                )}
+
+                <div className="response-list">
+                  <div className="response-heading">Responses</div>
+                  {questionAnswers.map((a) => (
+                    <div className="response-row answered" key={a.player}>
+                      <span className="response-icon">✓</span>
+                      <span className="response-player">{a.player}</span>
+                      <strong>{a.answer}</strong>
+                    </div>
+                  ))}
+                  {pendingPlayers.map((player) => (
+                    <div className="response-row pending" key={player}>
+                      <span className="response-icon">…</span>
+                      <span className="response-player">{player}</span>
+                      <span>Waiting for answer</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : isMyTurn ? (
+              <section className="panel action-panel">
+                <span className="panel-label">YOUR TURN</span>
+                <h2>What do you want to do?</h2>
+                <p className="muted">Ask a question to gather information, or make a guess if you think you know someone's secret.</p>
+
+                <div className="action-card">
                   <h3>Ask a question</h3>
-                  <input
-                    placeholder="Ask question..."
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                  />
-                  <button onClick={askQuestion}>Ask</button>
+                  <div className="inline-form">
+                    <input
+                      placeholder="e.g. Is your character human?"
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                    />
+                    <button className="primary-button" onClick={askQuestion}>Ask</button>
+                  </div>
+                </div>
 
-                  <h3>Or make a guess</h3>
-                  <select
-                    value={guessPlayer}
-                    onChange={(e) => setGuessPlayer(e.target.value)}
-                  >
-                    <option value="">Select player</option>
-                    {activePlayers
-                      .filter((p) => p.name !== name)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
+                <div className="action-divider"><span>OR</span></div>
+
+                <div className="action-card guess-card">
+                  <h3>Make a guess</h3>
+                  <div className="guess-form">
+                    <select value={guessPlayer} onChange={(e) => setGuessPlayer(e.target.value)}>
+                      <option value="">Choose a player</option>
+                      {activePlayers.filter((p) => p.name !== name).map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
-                  </select>
+                    </select>
+                    <input
+                      placeholder="Their secret answer"
+                      value={guess}
+                      onChange={(e) => setGuess(e.target.value)}
+                    />
+                    <button onClick={makeGuess}>Guess</button>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              <section className="panel waiting-turn-panel">
+                <div className="waiting-icon">👀</div>
+                <span className="panel-label">WAITING</span>
+                <h2>{currentTurn}'s turn</h2>
+                <p className="muted">They can ask a question or make a guess. Watch the history and plan your next move.</p>
+              </section>
+            )}
 
-                  <input
-                    placeholder="Their answer"
-                    value={guess}
-                    onChange={(e) => setGuess(e.target.value)}
-                  />
+            {message && <div className="game-message">{message}</div>}
 
-                  <button onClick={makeGuess}>Guess</button>
-                </>
+            <section className="panel history-panel">
+              <div className="panel-heading">
+                <div>
+                  <span className="panel-label">QUESTION HISTORY</span>
+                  <h2>What we've learned</h2>
+                </div>
+                <span className="count-badge">{history.length}</span>
+              </div>
+
+              {history.length === 0 ? (
+                <p className="empty-history">No questions yet. The game starts when the first player asks one.</p>
+              ) : (
+                <div className="history-list">
+                  {[...history].reverse().map((item, index) => (
+                    <div className="history-card" key={`${item.asker}-${item.question}-${index}`}>
+                      <div className="history-question">
+                        <span>{item.asker}</span>
+                        <strong>“{item.question}”</strong>
+                      </div>
+                      <div className="history-answers">
+                        {item.answers.map((a) => (
+                          <span key={a.player} className="history-answer">
+                            <b>{a.player}</b> {a.answer}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-
-              {!isMyTurn && !currentQuestion && (
-                <p>Waiting for {currentTurn} to ask a question or make a guess...</p>
-              )}
-
-              <p>{message}</p>
-            </>
-          )}
-
-          <h2>📜 History</h2>
-          {history.map((item, index) => (
-            <div key={index}>
-              <b>{item.asker}</b>
-              <p>{item.question}</p>
-              {item.answers.map((a, i) => (
-                <p key={i}>
-                  {a.player}: {a.answer}
-                </p>
-              ))}
-              <hr />
-            </div>
-          ))}
-        </>
+            </section>
+          </section>
+        </main>
       )}
     </div>
   );
