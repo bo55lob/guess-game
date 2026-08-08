@@ -17,6 +17,7 @@ function App() {
   const [guessPlayer, setGuessPlayer] = useState("");
   const [guess, setGuess] = useState("");
   const [guessConfirmation, setGuessConfirmation] = useState(null);
+  const [turnActionLocked, setTurnActionLocked] = useState(false);
   const [message, setMessage] = useState("");
   const [winner, setWinner] = useState("");
   const [history, setHistory] = useState([]);
@@ -31,38 +32,99 @@ function App() {
 
   useEffect(() => {
     socket.on("playersUpdated", setPlayers);
-    socket.on("gameStarted", ({ currentPlayer }) => { setGameStarted(true); setCurrentTurn(currentPlayer); setWinner(""); setMessage(""); });
+    socket.on("gameStarted", ({ currentPlayer }) => {
+      setGameStarted(true);
+      setCurrentTurn(currentPlayer);
+      setWinner("");
+      setMessage("");
+      setTurnActionLocked(false);
+    });
     socket.on("questionProgress", (data) => {
       setCurrentQuestion({ player: data.player, question: data.question, answers: data.answers });
-      setQuestionAnswers(data.answers); setPendingPlayers(data.pendingPlayers); setAnsweredPlayers(data.answeredPlayers); setMessage("");
+      setQuestionAnswers(data.answers);
+      setPendingPlayers(data.pendingPlayers);
+      setAnsweredPlayers(data.answeredPlayers);
+      setMessage("");
     });
     socket.on("nextTurn", ({ player }) => {
-      setCurrentTurn(player); setCurrentQuestion(null); setQuestionAnswers([]); setPendingPlayers([]); setAnsweredPlayers([]); setGuessPlayer(""); setGuess(""); setGuessConfirmation(null); setMessage("");
+      setCurrentTurn(player);
+      setCurrentQuestion(null);
+      setQuestionAnswers([]);
+      setPendingPlayers([]);
+      setAnsweredPlayers([]);
+      setGuessPlayer("");
+      setGuess("");
+      setGuessConfirmation(null);
+      setTurnActionLocked(false);
     });
-    socket.on("guessResult", ({ message: resultMessage }) => { setMessage(resultMessage); setGuessConfirmation(null); setGuess(""); setGuessPlayer(""); });
+    socket.on("guessResult", ({ message: resultMessage }) => {
+      setMessage(resultMessage);
+      setGuessConfirmation(null);
+      setGuess("");
+      setGuessPlayer("");
+    });
     socket.on("gameWinner", ({ winner }) => setWinner(winner));
     socket.on("questionHistory", setHistory);
-    socket.on("errorMessage", (error) => setMessage(error));
+    socket.on("errorMessage", (error) => {
+      setMessage(error);
+      setTurnActionLocked(false);
+    });
     return () => {
-      socket.off("playersUpdated"); socket.off("gameStarted"); socket.off("questionProgress"); socket.off("nextTurn"); socket.off("guessResult"); socket.off("gameWinner"); socket.off("questionHistory"); socket.off("errorMessage");
+      socket.off("playersUpdated");
+      socket.off("gameStarted");
+      socket.off("questionProgress");
+      socket.off("nextTurn");
+      socket.off("guessResult");
+      socket.off("gameWinner");
+      socket.off("questionHistory");
+      socket.off("errorMessage");
     };
   }, []);
 
-  function createRoom() { socket.emit("createRoom", name); socket.once("roomCreated", (code) => setJoinedRoom(code)); }
-  function joinRoom() { socket.emit("joinRoom", { roomCode: room.toUpperCase(), playerName: name }); setJoinedRoom(room.toUpperCase()); }
-  function submitAnswer() { socket.emit("submitAnswer", { roomCode: joinedRoom, answer }); }
-  function startGame() { socket.emit("startGame", joinedRoom); }
-  function askQuestion() { if (!question.trim() || !isMyTurn) return; socket.emit("askQuestion", { roomCode: joinedRoom, question }); setQuestion(""); }
-  function answerQuestion(value) { if (isEliminated || isAsking) return; socket.emit("answerQuestion", { roomCode: joinedRoom, answer: value }); }
+  function createRoom() {
+    socket.emit("createRoom", name);
+    socket.once("roomCreated", (code) => setJoinedRoom(code));
+  }
+
+  function joinRoom() {
+    socket.emit("joinRoom", { roomCode: room.toUpperCase(), playerName: name });
+    setJoinedRoom(room.toUpperCase());
+  }
+
+  function submitAnswer() {
+    socket.emit("submitAnswer", { roomCode: joinedRoom, answer });
+  }
+
+  function startGame() {
+    socket.emit("startGame", joinedRoom);
+  }
+
+  function askQuestion() {
+    if (!question.trim() || !isMyTurn || turnActionLocked) return;
+    socket.emit("askQuestion", { roomCode: joinedRoom, question });
+    setQuestion("");
+  }
+
+  function answerQuestion(value) {
+    if (isEliminated || isAsking) return;
+    socket.emit("answerQuestion", { roomCode: joinedRoom, answer: value });
+  }
+
   function openGuessConfirmation() {
-    if (!isMyTurn || !guessPlayer || !guess.trim() || currentQuestion) return;
+    if (!isMyTurn || turnActionLocked || !guessPlayer || !guess.trim() || currentQuestion) return;
     const target = activePlayers.find((player) => player.id === guessPlayer);
     if (!target) return;
     setGuessConfirmation({ targetName: target.name, targetId: target.id, guess: guess.trim() });
   }
+
   function confirmGuess() {
-    if (!guessConfirmation || !isMyTurn || currentQuestion) return;
-    socket.emit("makeGuess", { roomCode: joinedRoom, targetPlayer: guessConfirmation.targetId, guess: guessConfirmation.guess });
+    if (!guessConfirmation || !isMyTurn || turnActionLocked || currentQuestion) return;
+    setTurnActionLocked(true);
+    socket.emit("makeGuess", {
+      roomCode: joinedRoom,
+      targetPlayer: guessConfirmation.targetId,
+      guess: guessConfirmation.guess,
+    });
   }
 
   const isMyTurn = currentTurn === name;
@@ -74,7 +136,16 @@ function App() {
   const isAsking = currentQuestion?.player === name;
   const responseTotal = questionAnswers.length + pendingPlayers.length;
 
-  const themeToggle = <button className="theme-toggle" onClick={() => setDarkMode((value) => !value)} aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`} title={`Switch to ${darkMode ? "light" : "dark"} mode`}><span>{darkMode ? "☀️" : "🌙"}</span>{darkMode ? "Light" : "Dark"}</button>;
+  const themeToggle = (
+    <button
+      className="theme-toggle"
+      onClick={() => setDarkMode((value) => !value)}
+      aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+      title={`Switch to ${darkMode ? "light" : "dark"} mode`}
+    >
+      <span>{darkMode ? "☀️" : "🌙"}</span>{darkMode ? "Light" : "Dark"}
+    </button>
+  );
 
   if (!joinedRoom) return (
     <div className={`app-shell lobby-shell ${darkMode ? "theme-dark" : "theme-light"}`}>
@@ -102,12 +173,12 @@ function App() {
             {!isEliminated && !isAsking && hasAnswered && <div className="waiting-message success-message">✓ Your answer is locked in. Waiting for the others.</div>}
             {!isEliminated && isAsking && <div className="waiting-message">👀 Waiting for everyone else to answer.</div>}
             <div className="response-list"><div className="response-heading">Responses</div>{questionAnswers.map((a) => <div className="response-row answered" key={a.player}><span className="response-icon">✓</span><span className="response-player">{a.player}</span><strong>{a.answer}</strong></div>)}{pendingPlayers.map((player) => <div className="response-row pending" key={player}><span className="response-icon">…</span><span className="response-player">{player}</span><span>Waiting for answer</span></div>)}</div>
-          </section> : isMyTurn ? <section className="panel action-panel"><span className="panel-label">YOUR TURN</span><h2>Choose your move</h2><p className="muted">You can either ask a question to gather information or make a guess.</p><div className="action-card"><h3>Ask a question</h3><div className="inline-form"><input placeholder="e.g. Is your character human?" value={question} onChange={(e) => setQuestion(e.target.value)} /><button className="primary-button" onClick={askQuestion}>Ask</button></div></div><div className="action-divider"><span>OR</span></div><div className="action-card guess-card"><h3>Make a guess</h3><div className="guess-form"><select value={guessPlayer} onChange={(e) => setGuessPlayer(e.target.value)}><option value="">Choose a player</option>{activePlayers.filter((p) => p.name !== name).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input placeholder="Their secret answer" value={guess} onChange={(e) => setGuess(e.target.value)} /><button className="primary-button" onClick={openGuessConfirmation} disabled={!guessPlayer || !guess.trim()}>Make Guess</button></div></div></section> : <section className="panel waiting-turn-panel"><div className="waiting-icon">👀</div><span className="panel-label">WAITING</span><h2>{currentTurn}'s turn</h2><p className="muted">They can ask a question or make a guess. Watch the history and plan your next move.</p></section>}
+          </section> : isMyTurn ? <section className="panel action-panel"><span className="panel-label">YOUR TURN</span><h2>{turnActionLocked ? "Guess submitted" : "Choose your move"}</h2><p className="muted">{turnActionLocked ? "Your guess has used this turn. Waiting for the next player." : "You can either ask a question to gather information or make a guess."}</p><div className="action-card"><h3>Ask a question</h3><div className="inline-form"><input placeholder="e.g. Is your character human?" value={question} onChange={(e) => setQuestion(e.target.value)} disabled={turnActionLocked} /><button className="primary-button" onClick={askQuestion} disabled={turnActionLocked}>Ask</button></div></div><div className="action-divider"><span>OR</span></div><div className="action-card guess-card"><h3>Make a guess</h3><div className="guess-form"><select value={guessPlayer} onChange={(e) => setGuessPlayer(e.target.value)} disabled={turnActionLocked}><option value="">Choose a player</option>{activePlayers.filter((p) => p.name !== name).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select><input placeholder="Their secret answer" value={guess} onChange={(e) => setGuess(e.target.value)} disabled={turnActionLocked} /><button className="primary-button" onClick={openGuessConfirmation} disabled={turnActionLocked || !guessPlayer || !guess.trim()}>Make Guess</button></div></div></section> : <section className="panel waiting-turn-panel"><div className="waiting-icon">👀</div><span className="panel-label">WAITING</span><h2>{currentTurn}'s turn</h2><p className="muted">They can ask a question or make a guess. Watch the history and plan your next move.</p></section>}
           {message && <div className="game-message">{message}</div>}
           <section className="panel history-panel"><div className="panel-heading"><div><span className="panel-label">QUESTION HISTORY</span><h2>What we've learned</h2></div><span className="count-badge">{history.length}</span></div>{history.length === 0 ? <p className="empty-history">No questions yet. The game starts when the first player asks one.</p> : <div className="history-list">{[...history].reverse().map((item, index) => <div className="history-card" key={`${item.asker}-${item.question}-${index}`}><div className="history-question"><span>{item.asker}</span><strong>“{item.question}”</strong></div><div className="history-answers">{item.answers.map((a) => <span key={a.player} className="history-answer"><b>{a.player}</b> {a.answer}</span>)}</div></div>)}</div>}</section>
         </section>
       </main>}
-      {guessConfirmation && isMyTurn && !currentQuestion && <div className="guess-modal-backdrop" role="presentation"><div className="guess-modal" role="dialog" aria-modal="true" aria-labelledby="guess-confirm-title"><span className="panel-label">CONFIRM GUESS</span><h2 id="guess-confirm-title">Are you sure?</h2><p>You are guessing that <strong>{guessConfirmation.targetName}</strong>'s secret is:</p><div className="guess-preview">“{guessConfirmation.guess}”</div><p className="muted">This will use your turn.</p><div className="modal-actions"><button onClick={() => setGuessConfirmation(null)}>Cancel</button><button className="primary-button" onClick={confirmGuess}>Make Guess</button></div></div></div>}
+      {guessConfirmation && isMyTurn && !currentQuestion && !turnActionLocked && <div className="guess-modal-backdrop" role="presentation"><div className="guess-modal" role="dialog" aria-modal="true" aria-labelledby="guess-confirm-title"><span className="panel-label">CONFIRM GUESS</span><h2 id="guess-confirm-title">Are you sure?</h2><p>You are guessing that <strong>{guessConfirmation.targetName}</strong>'s secret is:</p><div className="guess-preview">“{guessConfirmation.guess}”</div><p className="muted">This will use your turn.</p><div className="modal-actions"><button onClick={() => setGuessConfirmation(null)}>Cancel</button><button className="primary-button" onClick={confirmGuess}>Make Guess</button></div></div></div>}
     </div>
   );
 }
