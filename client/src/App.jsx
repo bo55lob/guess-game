@@ -12,6 +12,8 @@ function App() {
   const [question, setQuestion] = useState("");
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [questionAnswers, setQuestionAnswers] = useState([]);
+  const [pendingPlayers, setPendingPlayers] = useState([]);
+  const [answeredPlayers, setAnsweredPlayers] = useState([]);
   const [guessPlayer, setGuessPlayer] = useState("");
   const [guess, setGuess] = useState("");
   const [message, setMessage] = useState("");
@@ -28,18 +30,24 @@ function App() {
       setMessage("");
     });
 
-    socket.on("newQuestion", (data) => {
-      setCurrentQuestion(data);
-      setQuestionAnswers([]);
+    socket.on("questionProgress", (data) => {
+      setCurrentQuestion({
+        player: data.player,
+        question: data.question,
+        answers: data.answers,
+      });
+      setQuestionAnswers(data.answers);
+      setPendingPlayers(data.pendingPlayers);
+      setAnsweredPlayers(data.answeredPlayers);
       setMessage("");
     });
-
-    socket.on("questionAnswers", setQuestionAnswers);
 
     socket.on("nextTurn", ({ player }) => {
       setCurrentTurn(player);
       setCurrentQuestion(null);
       setQuestionAnswers([]);
+      setPendingPlayers([]);
+      setAnsweredPlayers([]);
       setGuessPlayer("");
       setMessage("");
     });
@@ -55,8 +63,7 @@ function App() {
     return () => {
       socket.off("playersUpdated");
       socket.off("gameStarted");
-      socket.off("newQuestion");
-      socket.off("questionAnswers");
+      socket.off("questionProgress");
       socket.off("nextTurn");
       socket.off("guessResult");
       socket.off("gameWinner");
@@ -120,6 +127,8 @@ function App() {
 
   const isMyTurn = currentTurn === name;
   const activePlayers = players.filter((p) => !p.eliminated);
+  const hasAnswered = answeredPlayers.includes(name);
+  const isAsking = currentQuestion?.player === name;
 
   return (
     <div>
@@ -183,25 +192,40 @@ function App() {
                   <h3>{currentQuestion.player} asks:</h3>
                   <h2>{currentQuestion.question}</h2>
 
-                  {currentQuestion.player !== name &&
-                    !currentQuestion.answers?.some((a) => a.player === name) && (
-                      <div>
-                        <button onClick={() => answerQuestion("Yes")}>Yes</button>
-                        <button onClick={() => answerQuestion("No")}>No</button>
-                        <button onClick={() => answerQuestion("Maybe")}>Maybe</button>
-                      </div>
-                    )}
-
-                  {questionAnswers.length > 0 && (
+                  {!isAsking && !hasAnswered && (
                     <div>
-                      <h3>Answers</h3>
-                      {questionAnswers.map((a, index) => (
-                        <p key={index}>
-                          {a.player}: {a.answer}
-                        </p>
-                      ))}
+                      <p>❓ Your answer:</p>
+                      <button onClick={() => answerQuestion("Yes")}>Yes</button>
+                      <button onClick={() => answerQuestion("No")}>No</button>
+                      <button onClick={() => answerQuestion("Maybe")}>Maybe</button>
                     </div>
                   )}
+
+                  {!isAsking && hasAnswered && (
+                    <p>✅ You answered. Waiting for the others...</p>
+                  )}
+
+                  {isAsking && (
+                    <p>👀 Waiting for everyone else to answer...</p>
+                  )}
+
+                  <div>
+                    <h3>
+                      Responses ({questionAnswers.length}/{questionAnswers.length + pendingPlayers.length})
+                    </h3>
+
+                    {questionAnswers.map((a) => (
+                      <p key={a.player}>
+                        ✅ <b>{a.player}</b>: {a.answer}
+                      </p>
+                    ))}
+
+                    {pendingPlayers.map((player) => (
+                      <p key={player}>
+                        ⏳ <b>{player}</b>: Waiting for answer...
+                      </p>
+                    ))}
+                  </div>
                 </>
               )}
 
