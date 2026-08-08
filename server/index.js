@@ -112,10 +112,7 @@ io.on("connection", (socket) => {
         };
         room.answers = [];
 
-        io.to(roomCode).emit("newQuestion", {
-            player: currentPlayer.name,
-            question: question.trim(),
-        });
+        emitQuestionProgress(roomCode, room);
     });
 
     socket.on("answerQuestion", ({ roomCode, answer }) => {
@@ -132,7 +129,7 @@ io.on("connection", (socket) => {
         room.currentQuestion.answers.push({ player: player.name, answer });
         room.answers.push({ player: player.name, answer });
 
-        io.to(roomCode).emit("questionAnswers", room.answers);
+        emitQuestionProgress(roomCode, room);
 
         const activePlayers = room.players.filter(p => !p.eliminated);
         if (room.answers.length === activePlayers.length - 1) {
@@ -231,6 +228,27 @@ function emitTurn(roomCode, room) {
     if (!currentPlayer) return;
 
     io.to(roomCode).emit("nextTurn", { player: currentPlayer.name });
+}
+
+function emitQuestionProgress(roomCode, room) {
+    const currentPlayer = room.players[room.currentTurn];
+    const activeResponders = room.players.filter(
+        p => !p.eliminated && p.id !== currentPlayer?.id
+    );
+    const answeredIds = new Set(room.currentQuestion.answeredBy);
+
+    io.to(roomCode).emit("questionProgress", {
+        player: room.currentQuestion.asker,
+        question: room.currentQuestion.question,
+        answers: room.currentQuestion.answers,
+        pendingPlayers: activeResponders
+            .filter(p => !answeredIds.has(p.id))
+            .map(p => p.name),
+        answeredPlayers: activeResponders
+            .filter(p => answeredIds.has(p.id))
+            .map(p => p.name),
+        totalResponders: activeResponders.length,
+    });
 }
 
 function getPublicPlayers(room) {
