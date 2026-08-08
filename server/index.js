@@ -77,10 +77,10 @@ io.on("connection", (socket) => {
         const room=rooms[roomCode]; if(!room||!room.started||room.finished||room.guessRevealActive||room.currentQuestion)return;
         const guesser=room.players[room.currentTurn]; const target=room.players.find((p)=>p.id===targetPlayer);
         if(!guesser||guesser.id!==socket.id||guesser.eliminated||!target||target.eliminated||target.id===guesser.id||!guess?.trim())return;
+        const correct=target.answer.trim().toLowerCase()===guess.trim().toLowerCase();
         room.guessRevealActive=true;
-        io.to(roomCode).emit("guessRevealStart",{guesser:guesser.name,target:target.name,guess:guess.trim(),duration:3});
+        io.to(roomCode).emit("guessRevealStart",{guesser:guesser.name,target:target.name,guess:guess.trim(),correct,duration:3});
         setTimeout(()=>{
-            const correct=target.answer.trim().toLowerCase()===guess.trim().toLowerCase();
             if(correct)target.eliminated=true;
             io.to(roomCode).emit("playersUpdated",room.players);
             io.to(roomCode).emit("guessResult",{correct,message:correct?`${guesser.name} guessed correctly! ${target.name} has been eliminated.`:`${guesser.name}'s guess was wrong. ${target.name} stays in the game.`});
