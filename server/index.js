@@ -147,6 +147,7 @@ io.on("connection", (socket) => {
         const room = rooms[roomCode];
         if (!room || !room.started || room.finished) return;
 
+        // A guess is only valid during the current player's turn.
         const currentPlayer = room.players[room.currentTurn];
         if (!currentPlayer || currentPlayer.eliminated || currentPlayer.id !== socket.id) return;
         if (room.currentQuestion) return;
@@ -159,8 +160,13 @@ io.on("connection", (socket) => {
 
         if (correct) {
             target.eliminated = true;
+
             io.to(roomCode).emit("guessResult", {
-                message: `${currentPlayer.name} correctly guessed ${target.name}! ${target.name} was eliminated!`,
+                correct: true,
+                guesser: currentPlayer.name,
+                target: target.name,
+                guess: guess.trim(),
+                message: `${currentPlayer.name} correctly guessed ${target.name}'s answer!`,
             });
 
             io.to(roomCode).emit("playersUpdated", getPublicPlayers(room));
@@ -172,14 +178,21 @@ io.on("connection", (socket) => {
                 return;
             }
 
-            if (target.id === room.players[room.currentTurn]?.id) {
-                room.currentTurn = findNextActiveIndex(room, room.currentTurn);
-                emitTurn(roomCode, room);
-            }
+            // A correct guess still uses the guesser's turn.
+            room.currentTurn = findNextActiveIndex(room, room.currentTurn);
+            emitTurn(roomCode, room);
         } else {
             io.to(roomCode).emit("guessResult", {
-                message: `${currentPlayer.name} guessed ${target.name}'s answer incorrectly!`,
+                correct: false,
+                guesser: currentPlayer.name,
+                target: target.name,
+                guess: guess.trim(),
+                message: `${currentPlayer.name} guessed ${target.name}'s answer incorrectly.`,
             });
+
+            // An incorrect guess also uses the guesser's turn.
+            advanceTurn(room);
+            emitTurn(roomCode, room);
         }
     });
 
